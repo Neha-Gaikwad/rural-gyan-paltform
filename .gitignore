@@ -1,17 +1,99 @@
 # Environment files
 server/.env
+client/.env
 *.env
 !*.env.example
 
 # Dependencies
-server/node_modules
 node_modules/
+server/node_modules/
+client/node_modules/
+mobile-app/node_modules/
 
-ppt/final/presentation_final.aux
-ppt/final/presentation_final.fdb_latexmk
-ppt/final/presentation_final.log
-ppt/final/presentation_final.nav
-ppt/final/presentation_final.out
-ppt/final/presentation_final.snm
-ppt/final/presentation_final.synctex(busy)
-ppt/final/presentation_final.toc
+# Build outputs
+client/build/
+server/dist/
+build/
+dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+
+# Uploads
+server/uploads/*
+!server/uploads/.gitkeep
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# LaTeX files
+*.aux
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.snm
+*.synctex.gz
+*.synctex(busy)
+*.toc
+ppt/**/*.aux
+ppt/**/*.fdb_latexmk
+ppt/**/*.log
+ppt/**/*.nav
+ppt/**/*.out
+ppt/**/*.snm
+ppt/**/*.synctex*
+ppt/**/*.toc
+research-paper-pks_vj/*.aux
+research-paper-pks_vj/*.fdb_latexmk
+research-paper-pks_vj/*.fls
+research-paper-pks_vj/*.log
+research-paper-pks_vj/*.synctex.gz
+thesis_latex/*.aux
+thesis_latex/*.log
+
+# Test files
+*.test.js.snap
+coverage/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Package lock files (optional - uncomment if needed)
+# package-lock.json
+# yarn.lock
+
+# Expo
+.expo/
+.expo-shared/
+
+# Mobile
+mobile-app/.expo/
+mobile-app/android/build/
+mobile-app/android/.gradle/
+mobile-app/ios/Pods/
+
+# Debug files
+server/check_quiz.js
+server/debug_quiz_submit.js
+server/fix_quiz.js
+server/seed_log.txt
+server/test-auth.js
+test-auth.js
+test-login.js
+test-virtual-class.js
