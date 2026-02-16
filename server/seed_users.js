@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const User = require('./models/User');
 const Student = require('./models/Student');
 const Teacher = require('./models/Teacher');
+const Classroom = require('./models/Classroom');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -58,6 +59,16 @@ const generateUsers = async () => {
       });
 
       await teacherProfile.save();
+
+      // Create Classroom for this teacher
+      const classroom = new Classroom({
+        teacherId: savedTeacherUser._id,
+        subject: 'Mathematics', // Default subject
+        className: gradeName,
+        students: [] // Will be populated later if needed
+      });
+
+      await classroom.save();
 
       usersList.push({
         role: 'Teacher',

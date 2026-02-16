@@ -46,6 +46,7 @@ const Sidebar = ({ isOpen, setIsOpen, userRole }) => {
           { path: '/teacher/virtual-class', icon: Video, label: t('virtualClass') },
           { path: '/teacher/quiz', icon: BookOpen, label: t('quizSetup') },
           { path: '/teacher/subjects', icon: BookOpen, label: t('allocatedSubjects') },
+          { path: '/teacher/materials', icon: FileText, label: 'Materials' },
           { path: '/teacher/students', icon: Users, label: t('classManagement') },
           { path: '/teacher/performance', icon: BarChart3, label: t('performanceAnalysis') },
         ];

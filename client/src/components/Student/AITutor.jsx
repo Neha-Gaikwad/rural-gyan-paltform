@@ -8,16 +8,13 @@ import './AITutor.css';
 
 const AITutor = () => {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState(() => {
-    const saved = localStorage.getItem('ai-tutor-messages');
-    return saved ? JSON.parse(saved) : [{
-      id: 1,
-      type: 'ai',
-      content: t('aiTutorWelcome'),
-      timestamp: new Date().toISOString(),
-      reactions: {}
-    }];
-  });
+  const [messages, setMessages] = useState([{
+    id: 1,
+    type: 'ai',
+    content: t('aiTutorWelcome'),
+    timestamp: new Date().toISOString(),
+    reactions: {}
+  }]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -72,12 +69,22 @@ const AITutor = () => {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, scrollToBottom]);
+    const fetchHistory = async () => {
+      try {
+        const response = await studentAPI.getAIChatHistory();
+        if (response.data.data && response.data.data.length > 0) {
+          setMessages(response.data.data);
+        }
+      } catch (error) {
+        console.error('Failed to load chat history');
+      }
+    };
+    fetchHistory();
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem('ai-tutor-messages', JSON.stringify(messages));
-  }, [messages]);
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   const paginatedMessages = useMemo(() => {
     const startIndex = Math.max(0, messages.length - (currentPage + 1) * MESSAGES_PER_PAGE);
@@ -180,7 +187,8 @@ const AITutor = () => {
       const response = await studentAPI.transcribeAudio(formData);
       setInputMessage(prev => prev + ' ' + response.data.text);
     } catch (error) {
-      toast.error('Speech recognition failed');
+      console.error('Transcription error:', error);
+      toast.error('Voice input feature is not available');
     }
   };
 
@@ -247,14 +255,20 @@ const AITutor = () => {
             <span className="text-xs font-medium text-green-700 dark:text-green-400">Online</span>
           </div>
           <button
-            onClick={() => setTheme(theme === 'gradient' ? 'minimal' : 'gradient')}
+            onClick={(e) => {
+              e.stopPropagation();
+              setTheme(theme === 'gradient' ? 'minimal' : 'gradient');
+            }}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             title="Toggle theme"
           >
             <Settings className="text-gray-500 dark:text-gray-400" size={16} />
           </button>
           <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsFullscreen(!isFullscreen);
+            }}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
             title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
           >
@@ -306,19 +320,22 @@ const AITutor = () => {
                   ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white'
                   : 'bg-white/80 dark:bg-gray-800/80 text-gray-900 dark:text-white border border-gray-200/50 dark:border-gray-700/50'
                 }`}>
-                <div className="text-sm leading-relaxed whitespace-pre-wrap prose prose-sm max-w-none dark:prose-invert">
-                  {message.content.includes('#') ? (
-                    <div dangerouslySetInnerHTML={{
-                      __html: message.content
-                        .replace(/# (.*)/g, '<h3 class="text-lg font-bold mb-2 text-purple-600 dark:text-purple-400">$1</h3>')
-                        .replace(/## (.*)/g, '<h4 class="text-md font-semibold mb-2 text-blue-600 dark:text-blue-400">$1</h4>')
-                        .replace(/### (.*)/g, '<h5 class="text-sm font-medium mb-1 text-gray-700 dark:text-gray-300">$1</h5>')
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-purple-600 dark:text-purple-400">$1</strong>')
-                        .replace(/\n/g, '<br/>')
-                    }}
-                    />) : (
-                    message.content
-                  )}
+                <div className="text-sm leading-relaxed prose prose-sm max-w-none dark:prose-invert">
+                  <div dangerouslySetInnerHTML={{
+                    __html: message.content
+                      .replace(/### (.*?)\n/g, '<h5 class="text-base font-semibold mb-2 mt-3 text-gray-800 dark:text-gray-200">$1</h5>')
+                      .replace(/## (.*?)\n/g, '<h4 class="text-lg font-bold mb-2 mt-3 text-blue-600 dark:text-blue-400">$1</h4>')
+                      .replace(/# (.*?)\n/g, '<h3 class="text-xl font-bold mb-3 mt-4 text-purple-600 dark:text-purple-400">$1</h3>')
+                      .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-purple-700 dark:text-purple-300">$1</strong>')
+                      .replace(/\*(.*?)\*/g, '<em class="italic text-gray-700 dark:text-gray-300">$1</em>')
+                      .replace(/`(.*?)`/g, '<code class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono text-pink-600 dark:text-pink-400">$1</code>')
+                      .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-3"><code>$1</code></pre>')
+                      .replace(/^- (.*?)$/gm, '<li class="ml-4 mb-1">• $1</li>')
+                      .replace(/^\d+\. (.*?)$/gm, '<li class="ml-4 mb-1 list-decimal">$1</li>')
+                      .replace(/\n\n/g, '<br/><br/>')
+                      .replace(/\n/g, '<br/>')
+                  }}
+                  />
                 </div>
 
                 {message.files && message.files.length > 0 && (

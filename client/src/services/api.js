@@ -107,6 +107,16 @@ export const teacherAPI = {
   updateQuiz: (id, data) => api.put(`/teacher/quiz/${id}`, data),
   deleteQuiz: (id) => api.delete(`/teacher/quiz/${id}`),
   updatePerformance: (studentId, data) => api.post(`/teacher/performance/${studentId}`, data),
+  getMaterials: () => api.get('/teacher/materials'),
+  uploadMaterial: (formData) => {
+    return api.post('/teacher/materials', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+  deleteMaterial: (materialId) => {
+    const [classroomId, matId] = materialId.split('/');
+    return api.delete(`/teacher/materials/${classroomId}/${matId}`);
+  },
 };
 
 export const studentAPI = {

@@ -25,14 +25,15 @@ const Materials = () => {
     }
   };
 
-  const getFileIcon = (type) => {
-    switch (type) {
-      case 'pdf':
-        return <FileText className="text-red-500" size={24} />;
+  const getFileIcon = (material) => {
+    if (material.isQuiz) return <BookOpen className="text-purple-500" size={24} />;
+    switch (material.category) {
+      case 'notes':
+        return <FileText className="text-blue-500" size={24} />;
       case 'video':
-        return <Video className="text-blue-500" size={24} />;
-      case 'image':
-        return <Image className="text-green-500" size={24} />;
+        return <Video className="text-red-500" size={24} />;
+      case 'assignment':
+        return <FileText className="text-green-500" size={24} />;
       default:
         return <BookOpen className="text-gray-500" size={24} />;
     }
@@ -82,12 +83,12 @@ const Materials = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {materials
           .filter(material => {
-            if (activeTab === 'all') return material.status !== 'submitted' && material.status !== 'expired';
-            if (activeTab === 'assignments') return material.type === 'assignment' && material.status === 'pending';
+            if (activeTab === 'all') return !material.isQuiz;
+            if (activeTab === 'notes') return material.category === 'notes';
+            if (activeTab === 'videos') return material.category === 'video';
+            if (activeTab === 'assignments') return material.category === 'assignment' && !material.isQuiz;
             if (activeTab === 'quizzes') return material.isQuiz;
             if (activeTab === 'history') return material.status === 'submitted' || material.status === 'expired';
-            if (activeTab === 'notes') return material.type === 'pdf';
-            if (activeTab === 'videos') return material.type === 'video';
             return true;
           })
           .map((material, index) => (
@@ -103,21 +104,30 @@ const Materials = () => {
               
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center space-x-3">
-                  {getFileIcon(material.type === 'assignment' ? 'document' : material.type)}
+                  {getFileIcon(material)}
                   <div className="flex-1">
                     <h3 className="font-semibold text-gray-900 dark:text-white">{material.title}</h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400 capitalize">
-                      {material.subject || material.type}
+                      {material.subject || (material.category ? material.category : material.type)}
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className="mb-4 space-y-2">
+                {material.category && (
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                    material.category === 'notes' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                    material.category === 'video' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                  }`}>
+                    {material.category.toUpperCase()}
+                  </span>
+                )}
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {material.type === 'assignment' ? (
+                  {material.isQuiz || material.category === 'assignment' ? (
                     <span className={material.status === 'expired' ? 'text-red-500' : ''}>
-                      Due: {new Date(material.dueDate).toLocaleDateString()}
+                      Due: {new Date(material.dueDate || material.endTime).toLocaleDateString()}
                     </span>
                   ) : (
                     <span>Uploaded on {new Date(material.uploadedAt).toLocaleDateString()}</span>
@@ -150,16 +160,28 @@ const Materials = () => {
                   >
                     {material.status === 'submitted' ? 'Completed' : 'Expired'}
                   </button>
+                ) : material.category === 'assignment' ? (
+                  <button className="flex-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                    <Eye size={14} className="inline mr-1" />
+                    View Assignment
+                  </button>
                 ) : (
                   <>
-                    <button className="flex-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 py-2 px-3 rounded-lg text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">
+                    <button 
+                      onClick={() => window.open(`http://localhost:5000${material.url}`, '_blank')}
+                      className="flex-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 py-2 px-3 rounded-lg text-sm font-medium hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+                    >
                       <Eye size={14} className="inline mr-1" />
-                      View
+                      {material.category === 'video' ? 'Watch' : 'View'}
                     </button>
-                    <button className="flex-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">
+                    <a
+                      href={`http://localhost:5000${material.url}`}
+                      download
+                      className="flex-1 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 py-2 px-3 rounded-lg text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors text-center"
+                    >
                       <Download size={14} className="inline mr-1" />
                       Download
-                    </button>
+                    </a>
                   </>
                 )}
               </div>

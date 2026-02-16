@@ -48,6 +48,9 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
+
 // Logging
 if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));

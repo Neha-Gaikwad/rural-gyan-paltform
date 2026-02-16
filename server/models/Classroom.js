@@ -46,7 +46,13 @@ const classroomSchema = new mongoose.Schema({
       type: String,
       enum: ['pdf', 'video', 'document', 'link']
     },
+    category: {
+      type: String,
+      enum: ['notes', 'video', 'assignment'],
+      default: 'notes'
+    },
     url: String,
+    dueDate: Date,
     uploadedAt: {
       type: Date,
       default: Date.now

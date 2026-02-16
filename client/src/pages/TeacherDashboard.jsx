@@ -9,6 +9,7 @@ import QuizManagement from '../components/Teacher/QuizManagement';
 import AllocatedSubjects from '../components/Teacher/AllocatedSubjects';
 import ClassManagement from '../components/Teacher/ClassManagement';
 import PerformanceAnalysis from '../components/Teacher/PerformanceAnalysis';
+import MaterialsManagement from '../components/Teacher/MaterialsManagement';
 import Profile from '../components/Common/Profile';
 
 const TeacherDashboard = () => {
@@ -23,6 +24,7 @@ const TeacherDashboard = () => {
       '/teacher/subjects': t('allocatedSubjects'),
       '/teacher/students': t('classManagement'),
       '/teacher/performance': t('performanceAnalysis'),
+      '/teacher/materials': 'Materials Management',
       '/teacher/profile': t('profile')
     };
     return routes[pathname] || t('dashboard');
@@ -61,6 +63,7 @@ const TeacherDashboard = () => {
               <Route path="subjects" element={<AllocatedSubjects />} />
               <Route path="students" element={<ClassManagement />} />
               <Route path="performance" element={<PerformanceAnalysis />} />
+              <Route path="materials" element={<MaterialsManagement />} />
               <Route path="profile" element={<Profile />} />
             </Routes>
           </div>

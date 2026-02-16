@@ -58,12 +58,19 @@ router.get('/materials', async (req, res) => {
       return res.status(404).json({ message: 'Student profile not found' });
     }
 
-    // Get classroom materials
-    const classroom = await Classroom.findOne({
-      students: req.user.id
+    // Get all classrooms for student's grade/standard
+    const classrooms = await Classroom.find({
+      className: student.standard
     });
 
-    const materials = classroom?.materials || [];
+    // Collect all materials from all classrooms
+    const materials = classrooms.flatMap(classroom => 
+      classroom.materials.map(m => ({
+        ...m.toObject(),
+        _id: m._id,
+        subject: classroom.subject
+      }))
+    );
 
     // Get quizzes as assignments
     const quizzes = await Quiz.find({
@@ -84,6 +91,7 @@ router.get('/materials', async (req, res) => {
         type: 'assignment',
         uploadedAt: quiz.startTime,
         dueDate: quiz.endTime,
+        endTime: quiz.endTime,
         isQuiz: true,
         status,
         score: submission ? submission.score : null,

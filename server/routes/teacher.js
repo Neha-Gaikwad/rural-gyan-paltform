@@ -1,5 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const multer = require('multer');
+const path = require('path');
 const Teacher = require('../models/Teacher');
 const Student = require('../models/Student');
 const Quiz = require('../models/Quiz');
@@ -7,6 +9,30 @@ const Classroom = require('../models/Classroom');
 const { auth, authorize } = require('../middlewares/auth');
 
 const router = express.Router();
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/');
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /pdf|doc|docx|ppt|pptx|mp4|avi|mov/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    if (extname && mimetype) {
+      return cb(null, true);
+    }
+    cb(new Error('Invalid file type'));
+  }
+});
 
 // Apply auth and teacher authorization to all routes
 router.use(auth, authorize('teacher'));
@@ -19,7 +45,10 @@ router.get('/classes', async (req, res) => {
       return res.status(404).json({ message: 'Teacher profile not found' });
     }
 
-    const classrooms = await Classroom.find({ teacherId: req.user.id })
+    const classrooms = await Classroom.find({
+      teacherId: req.user.id,
+      className: { $in: teacher.assignedClasses }
+    })
       .populate('students', 'fullName email')
       .sort({ createdAt: -1 });
 
@@ -193,6 +222,103 @@ router.post('/performance/:studentId', [
       success: true,
       message: 'Performance updated successfully'
     });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get materials
+router.get('/materials', async (req, res) => {
+  try {
+    const teacher = await Teacher.findOne({ userId: req.user.id });
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher profile not found' });
+    }
+
+    const classrooms = await Classroom.find({ teacherId: req.user.id });
+    const allMaterials = classrooms.flatMap(c => 
+      c.materials.map(m => ({ ...m.toObject(), _id: m._id, classroomId: c._id }))
+    );
+
+    res.json({ success: true, data: allMaterials });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Upload material
+router.post('/materials', upload.single('file'), async (req, res) => {
+  try {
+    const { title, category, subject, dueDate } = req.body;
+    
+    if (!title || !category || !subject) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const teacher = await Teacher.findOne({ userId: req.user.id });
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher profile not found' });
+    }
+
+    const fileUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    
+    let classroom = await Classroom.findOne({ 
+      teacherId: req.user.id, 
+      subject 
+    });
+
+    if (!classroom) {
+      classroom = new Classroom({
+        teacherId: req.user.id,
+        subject,
+        className: teacher.assignedClasses[0] || 'General',
+        students: []
+      });
+    }
+
+    const materialData = {
+      title,
+      type: category === 'video' ? 'video' : 'document',
+      category,
+      url: fileUrl,
+      uploadedAt: new Date()
+    };
+
+    if (dueDate) {
+      materialData.dueDate = new Date(dueDate);
+    }
+
+    classroom.materials.push(materialData);
+    await classroom.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Material uploaded successfully',
+      data: classroom.materials[classroom.materials.length - 1]
+    });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete material
+router.delete('/materials/:classroomId/:materialId', async (req, res) => {
+  try {
+    const classroom = await Classroom.findOne({ 
+      _id: req.params.classroomId, 
+      teacherId: req.user.id 
+    });
+    
+    if (!classroom) {
+      return res.status(404).json({ message: 'Classroom not found' });
+    }
+
+    classroom.materials = classroom.materials.filter(
+      m => m._id.toString() !== req.params.materialId
+    );
+    await classroom.save();
+
+    res.json({ success: true, message: 'Material deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }

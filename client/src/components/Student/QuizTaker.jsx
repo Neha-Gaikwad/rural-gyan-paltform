@@ -168,7 +168,13 @@ const QuizTaker = () => {
             </div>
             <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-xl">
               <div className="text-sm text-gray-500 dark:text-gray-400">Status</div>
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">Passed</div>
+              <div className={`text-2xl font-bold ${
+                result.percentage >= 40 
+                  ? 'text-green-600 dark:text-green-400' 
+                  : 'text-red-600 dark:text-red-400'
+              }`}>
+                {result.percentage >= 40 ? 'Passed' : 'Failed'}
+              </div>
             </div>
           </div>
 
@@ -352,6 +358,7 @@ const QuizTaker = () => {
                   {currentQuestion.options.map((option, oIndex) => (
                     <label
                       key={oIndex}
+                      onClick={() => handleOptionSelect(currentQuestion._id, oIndex)}
                       className={`flex items-center p-6 rounded-xl border-2 cursor-pointer transition-all group ${
                         answers[currentQuestion._id]?.selectedOption === oIndex
                           ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-md'

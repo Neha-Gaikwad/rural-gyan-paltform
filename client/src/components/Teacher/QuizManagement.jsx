@@ -376,12 +376,17 @@ const CreateQuizModal = ({ onClose, onSuccess, quizToEdit }) => {
     const fetchClasses = async () => {
       try {
         const response = await teacherAPI.getClasses();
-        const classList = response.data.data.assignedClasses || [];
+        let classList = [];
+        if (response.data.data.classrooms && response.data.data.classrooms.length > 0) {
+          classList = response.data.data.classrooms.map(c => c.className);
+        } else {
+          classList = response.data.data.assignedClasses || [];
+        }
         const classObjects = classList.map((className, index) => ({
           _id: index,
           name: className
         }));
-        setClasses(classObjects); 
+        setClasses(classObjects);
       } catch (error) {
         console.error('Error fetching classes:', error);
         toast.error('Failed to load classes');
