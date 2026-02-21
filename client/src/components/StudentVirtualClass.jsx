@@ -40,11 +40,11 @@ const StudentVirtualClass = () => {
         navigate(`/virtual-class/${classId}`);
       } else {
         const error = await response.json();
-        alert(error.message || 'Failed to join class');
+        alert(error.message || 'Failed to join class. Please try again.');
       }
     } catch (error) {
       console.error('Error joining class:', error);
-      alert('Failed to join class');
+      alert('Network error. Please check your connection and try again.');
     }
   };
 

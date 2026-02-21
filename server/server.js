@@ -22,10 +22,13 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: [process.env.CLIENT_URL || "http://localhost:3001", "http://localhost:3001", "http://localhost:5500", "http://127.0.0.1:5500", "null"],
+    origin: [process.env.CLIENT_URL || "http://localhost:3001", "http://localhost:3001", "http://localhost:3000", "http://localhost:5500", "http://127.0.0.1:5500", "null"],
     methods: ["GET", "POST"]
   }
 });
+
+// Make io accessible to routes
+app.set('io', io);
 
 // Connect to database
 connectDB();
@@ -93,20 +96,22 @@ io.on('connection', (socket) => {
 
   // Join virtual class
   socket.on('join-virtual-class', (data) => {
-    const { classId, userId, userType } = data;
+    const { classId, userId, userType, userName } = data;
     socket.join(classId);
     socket.userId = userId;
     socket.userType = userType;
+    socket.userName = userName;
     socket.classId = classId;
 
     // Notify others about new participant
     socket.to(classId).emit('participant-joined', {
       userId,
       userType,
+      userName,
       socketId: socket.id
     });
 
-    console.log(`${userType} ${userId} joined virtual class ${classId}`);
+    console.log(`${userType} ${userName} joined virtual class ${classId}`);
   });
 
   // Leave virtual class
@@ -122,12 +127,15 @@ io.on('connection', (socket) => {
 
   // Handle chat messages
   socket.on('chat-message', (data) => {
-    io.to(data.classId).emit('chat-message', {
+    const messageWithTimestamp = {
       message: data.message,
       sender: data.sender,
+      userName: data.userName,
       userId: data.userId,
       timestamp: new Date()
-    });
+    };
+    // Broadcast to everyone in the room INCLUDING sender
+    io.to(data.classId).emit('chat-message', messageWithTimestamp);
   });
 
   // WebRTC signaling for video calls
@@ -135,7 +143,9 @@ io.on('connection', (socket) => {
     socket.to(data.targetSocketId).emit('video-offer', {
       offer: data.offer,
       fromSocketId: socket.id,
-      fromUserId: socket.userId
+      fromUserId: socket.userId,
+      userName: socket.userName,
+      userType: socket.userType
     });
   });
 
@@ -189,10 +199,19 @@ io.on('connection', (socket) => {
       socket.to(socket.classId).emit('participant-left', {
         userId: socket.userId,
         userType: socket.userType,
+        userName: socket.userName,
         socketId: socket.id
       });
     }
     console.log('User disconnected:', socket.id);
+  });
+
+  // Handle class ended by teacher
+  socket.on('end-class-broadcast', (data) => {
+    io.to(data.classId).emit('class-ended', {
+      classId: data.classId,
+      endedBy: socket.userId
+    });
   });
 });
 

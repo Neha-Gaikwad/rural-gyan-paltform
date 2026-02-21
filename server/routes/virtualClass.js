@@ -124,6 +124,15 @@ router.patch('/:id/end', authorize('teacher'), async (req, res) => {
     virtualClass.endedAt = new Date();
     await virtualClass.save();
 
+    // Notify via socket that class ended
+    const io = req.app.get('io');
+    if (io) {
+      io.to(req.params.id).emit('class-ended', {
+        classId: req.params.id,
+        endedBy: req.user.id
+      });
+    }
+
     res.json({
       success: true,
       message: 'Class ended successfully',
@@ -142,8 +151,10 @@ router.get('/student/available', authorize('student'), async (req, res) => {
       return res.status(404).json({ message: 'Student profile not found' });
     }
 
+    // Normalize grade comparison - extract numbers only
+    const studentGrade = student.standard.replace(/\D/g, '');
+
     const classes = await VirtualClass.find({
-      grade: student.standard,
       status: { $in: ['scheduled', 'live'] },
       scheduledAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Last 24 hours
     })
@@ -151,17 +162,23 @@ router.get('/student/available', authorize('student'), async (req, res) => {
     .populate('teacherId.userId', 'fullName')
     .sort({ scheduledAt: 1 });
 
+    // Filter by grade on application level for flexible matching
+    const filteredClasses = classes.filter(cls => {
+      const classGrade = cls.grade.replace(/\D/g, '');
+      return classGrade === studentGrade;
+    });
+
     res.json({
       success: true,
-      data: classes
+      data: filteredClasses
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Join class (Students)
-router.post('/:id/join', authorize('student'), async (req, res) => {
+// Join class (Students and Teachers)
+router.post('/:id/join', auth, async (req, res) => {
   try {
     const virtualClass = await VirtualClass.findById(req.params.id);
     if (!virtualClass) {
@@ -172,23 +189,22 @@ router.post('/:id/join', authorize('student'), async (req, res) => {
       return res.status(400).json({ message: 'Class is not currently live' });
     }
 
-    // Check if already joined
-    const existingParticipant = virtualClass.participants.find(
-      p => p.userId.toString() === req.user.id && p.isPresent
-    );
+    // Check if already joined (only for students)
+    if (req.user.role === 'student') {
+      const existingParticipant = virtualClass.participants.find(
+        p => p.userId.toString() === req.user.id && p.isPresent
+      );
 
-    if (existingParticipant) {
-      return res.status(400).json({ message: 'Already joined this class' });
+      if (!existingParticipant) {
+        // Add participant
+        virtualClass.participants.push({
+          userId: req.user.id,
+          joinedAt: new Date(),
+          isPresent: true
+        });
+        await virtualClass.save();
+      }
     }
-
-    // Add participant
-    virtualClass.participants.push({
-      userId: req.user.id,
-      joinedAt: new Date(),
-      isPresent: true
-    });
-
-    await virtualClass.save();
 
     res.json({
       success: true,

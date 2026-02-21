@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 import Peer from 'simple-peer';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, Phone, 
-  MessageSquare, Users, X, Send, MoreVertical, Settings,
+  MessageSquare, Users, X, Send,
   Clock, CheckCircle, XCircle
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
@@ -82,7 +82,7 @@ const VirtualClass = () => {
 
   useEffect(() => {
     fetchClassData();
-    socketRef.current = io('/');
+    socketRef.current = io(process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000');
     
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then((currentStream) => {
@@ -100,6 +100,7 @@ const VirtualClass = () => {
 
         // Existing users receive this when a new user joins
         socketRef.current.on('participant-joined', (payload) => {
+          console.log('🟢 Participant joined:', payload);
           const peer = createPeer(payload.socketId, socketRef.current.id, currentStream);
           peersRef.current.push({
             peerID: payload.socketId,
@@ -115,29 +116,31 @@ const VirtualClass = () => {
             userId: payload.userId,
             userType: payload.userType
           }]);
-          toast.success(`${payload.userType} joined the class`);
+          toast.success(`${payload.userName} joined`);
         });
 
         // New user receives this when an existing user offers a connection
         socketRef.current.on('video-offer', (payload) => {
+          console.log('🔵 Video offer received:', payload);
           const peer = addPeer(payload.offer, payload.fromSocketId, currentStream);
           peersRef.current.push({
             peerID: payload.fromSocketId,
             peer,
-            userName: 'Connecting...', // We might need to fetch user details or pass them in offer
+            userName: payload.userName || 'Connecting...',
             userId: payload.fromUserId,
-            userType: 'participant' // Default, maybe update later
+            userType: payload.userType || 'participant'
           });
           setPeers((users) => [...users, { 
             peer, 
-            userName: 'Connecting...', 
+            userName: payload.userName || 'Connecting...',
             peerID: payload.fromSocketId,
             userId: payload.fromUserId,
-            userType: 'participant'
+            userType: payload.userType || 'participant'
           }]);
         });
 
         socketRef.current.on('video-answer', (payload) => {
+          console.log('🟡 Video answer received:', payload);
           const item = peersRef.current.find((p) => p.peerID === payload.fromSocketId);
           if (item) {
             item.peer.signal(payload.answer);
@@ -154,6 +157,18 @@ const VirtualClass = () => {
         socketRef.current.on('chat-message', (message) => {
           setMessages((msgs) => [...msgs, message]);
         });
+
+        // Listen for class ended event
+        socketRef.current.on('class-ended', () => {
+          toast.error('Class has been ended by teacher');
+          if (currentStream) {
+            currentStream.getTracks().forEach(track => track.stop());
+          }
+          const dashboardPath = user.role === 'teacher' ? '/teacher/dashboard' : 
+                               user.role === 'student' ? '/student/dashboard' : 
+                               '/dashboard';
+          setTimeout(() => navigate(dashboardPath), 2000);
+        });
       })
       .catch((err) => {
         console.error("Error accessing media devices:", err);
@@ -164,8 +179,11 @@ const VirtualClass = () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
-      socketRef.current.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classId]);
 
   useEffect(() => {
@@ -280,14 +298,31 @@ const VirtualClass = () => {
       };
       
       socketRef.current.emit('chat-message', messageData);
-      setMessages((msgs) => [...msgs, messageData]); // Optimistic update
+      // Don't add locally - wait for server broadcast
       setNewMessage('');
     }
   };
 
   const leaveClass = () => {
     if (window.confirm("Are you sure you want to leave the class?")) {
-      navigate('/dashboard');
+      // Stop all media tracks
+      if (stream) {
+        stream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+      
+      // Disconnect socket
+      if (socketRef.current) {
+        socketRef.current.emit('leave-virtual-class', classId);
+        socketRef.current.disconnect();
+      }
+      
+      // Navigate based on user role
+      const dashboardPath = user.role === 'teacher' ? '/teacher/dashboard' : 
+                           user.role === 'student' ? '/student/dashboard' : 
+                           '/dashboard';
+      navigate(dashboardPath);
     }
   };
 

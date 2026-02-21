@@ -84,15 +84,27 @@ const TeacherVirtualClass = () => {
   };
 
   const endClass = async (classId) => {
+    if (!window.confirm('Are you sure you want to end this class?')) {
+      return;
+    }
+    
     try {
       const token = localStorage.getItem('accessToken');
       await fetch(`/api/virtual-class/${classId}/end`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      alert('Class ended successfully');
       fetchClasses();
+      
+      // If currently in the class, navigate back
+      if (window.location.pathname.includes(classId)) {
+        navigate('/teacher/virtual-class');
+      }
     } catch (error) {
       console.error('Error ending class:', error);
+      alert('Failed to end class');
     }
   };
 
