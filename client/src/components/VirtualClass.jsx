@@ -5,10 +5,11 @@ import Peer from 'simple-peer';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, Phone, 
   MessageSquare, Users, X, Send,
-  Clock, CheckCircle, XCircle
+  Clock, CheckCircle, XCircle, Subtitles, Volume2, VolumeX, Presentation
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
+import Whiteboard from './Whiteboard';
 
 const VideoCard = ({ peer, isLocal, stream, userName }) => {
   const videoRef = useRef();
@@ -59,15 +60,62 @@ const VirtualClass = () => {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [showParticipants, setShowParticipants] = useState(false);
+  const [showWhiteboard, setShowWhiteboard] = useState(false);
   const [classData, setClassData] = useState(null);
   const [timer, setTimer] = useState('00:00:00');
   const [startTime] = useState(Date.now());
+  const [captionsEnabled, setCaptionsEnabled] = useState(false);
+  const [currentCaption, setCurrentCaption] = useState('');
+  const [captionLanguage, setCaptionLanguage] = useState('en-IN');
+  const captionTimeoutRef = useRef(null);
+
+  const translateText = async (text, targetLang) => {
+    if (targetLang === 'en-IN') return text;
+    try {
+      // Try multiple translation endpoints
+      // Method 1: Google Translate (free endpoint)
+      const response = await fetch(
+        `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(text)}`
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const translated = data[0]?.[0]?.[0];
+        if (translated && translated !== text) {
+          return translated;
+        }
+      }
+      
+      // Method 2: Fallback to LibreTranslate (if available)
+      const libreResponse = await fetch('https://libretranslate.de/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          q: text,
+          source: 'en',
+          target: 'hi',
+          format: 'text'
+        })
+      });
+      
+      if (libreResponse.ok) {
+        const libreData = await libreResponse.json();
+        return libreData.translatedText || text;
+      }
+      
+      return text;
+    } catch (error) {
+      console.error('Translation error:', error);
+      return text;
+    }
+  };
   
   const socketRef = useRef();
   const peersRef = useRef([]);
   const userVideo = useRef();
   const screenTrackRef = useRef();
   const messagesEndRef = useRef(null);
+  const recognitionRef = useRef(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -96,6 +144,28 @@ const VirtualClass = () => {
           userId: user._id,
           userType: user.role,
           userName: user.fullName
+        });
+
+        // Handle existing participants (when joining a room with people already in it)
+        socketRef.current.on('existing-participants', (participants) => {
+          console.log('🟣 Existing participants:', participants);
+          participants.forEach(participant => {
+            const peer = createPeer(participant.socketId, socketRef.current.id, currentStream);
+            peersRef.current.push({
+              peerID: participant.socketId,
+              peer,
+              userName: participant.userName || 'Unknown User',
+              userId: participant.userId,
+              userType: participant.userType
+            });
+            setPeers((users) => [...users, { 
+              peer, 
+              userName: participant.userName || 'Unknown User', 
+              peerID: participant.socketId,
+              userId: participant.userId,
+              userType: participant.userType
+            }]);
+          });
         });
 
         // Existing users receive this when a new user joins
@@ -158,6 +228,22 @@ const VirtualClass = () => {
           setMessages((msgs) => [...msgs, message]);
         });
 
+        socketRef.current.on('caption-update', (data) => {
+          if (data.userId !== user._id) {
+            translateText(data.caption, captionLanguage).then(translated => {
+              setCurrentCaption(translated);
+              
+              if (captionTimeoutRef.current) {
+                clearTimeout(captionTimeoutRef.current);
+              }
+              
+              captionTimeoutRef.current = setTimeout(() => {
+                setCurrentCaption('');
+              }, 5000);
+            });
+          }
+        });
+
         // Listen for class ended event
         socketRef.current.on('class-ended', () => {
           toast.error('Class has been ended by teacher');
@@ -168,6 +254,23 @@ const VirtualClass = () => {
                                user.role === 'student' ? '/student/dashboard' : 
                                '/dashboard';
           setTimeout(() => navigate(dashboardPath), 2000);
+        });
+
+        // Listen for teacher controls
+        socketRef.current.on('force-mute', () => {
+          if (currentStream) {
+            currentStream.getAudioTracks()[0].enabled = false;
+            setIsAudioEnabled(false);
+            toast.error('Teacher muted your microphone');
+          }
+        });
+
+        socketRef.current.on('force-video-off', () => {
+          if (currentStream) {
+            currentStream.getVideoTracks()[0].enabled = false;
+            setIsVideoEnabled(false);
+            toast.error('Teacher turned off your camera');
+          }
         });
       })
       .catch((err) => {
@@ -190,6 +293,75 @@ const VirtualClass = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognitionRef.current = new SpeechRecognition();
+      recognitionRef.current.continuous = true;
+      recognitionRef.current.interimResults = true;
+      recognitionRef.current.lang = captionLanguage;
+
+      recognitionRef.current.onresult = (event) => {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript + ' ';
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        const caption = finalTranscript || interimTranscript;
+        setCurrentCaption(caption);
+        
+        // Clear previous timeout
+        if (captionTimeoutRef.current) {
+          clearTimeout(captionTimeoutRef.current);
+        }
+        
+        // Auto-clear caption after 5 seconds of no speech
+        captionTimeoutRef.current = setTimeout(() => {
+          setCurrentCaption('');
+        }, 5000);
+        
+        if (finalTranscript) {
+          socketRef.current?.emit('caption-update', {
+            classId,
+            caption: finalTranscript,
+            userId: user._id,
+            userName: user.fullName
+          });
+        }
+      };
+
+      recognitionRef.current.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        if (event.error === 'no-speech') {
+          setCurrentCaption('');
+        }
+      };
+    }
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, [captionLanguage, classId, user._id, user.fullName]);
+
+  useEffect(() => {
+    if (captionsEnabled && recognitionRef.current) {
+      recognitionRef.current.lang = captionLanguage;
+      recognitionRef.current.start();
+    } else if (recognitionRef.current) {
+      recognitionRef.current.stop();
+      setCurrentCaption('');
+    }
+  }, [captionsEnabled, captionLanguage]);
+
   const fetchClassData = async () => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -210,6 +382,13 @@ const VirtualClass = () => {
       initiator: true,
       trickle: true,
       stream,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
     });
 
     peer.on('signal', (signal) => {
@@ -228,6 +407,13 @@ const VirtualClass = () => {
       initiator: false,
       trickle: true,
       stream,
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
     });
 
     peer.on('signal', (signal) => {
@@ -257,31 +443,93 @@ const VirtualClass = () => {
     }
   };
 
-  const toggleScreenShare = () => {
+  const toggleScreenShare = async () => {
     if (isScreenSharing) {
-      // Stop screen share
-      screenTrackRef.current.stop();
-      toast('Screen sharing stopped');
-      setIsScreenSharing(false);
-    } else {
-      navigator.mediaDevices.getDisplayMedia({ cursor: true })
-        .then((screenStream) => {
-          const screenTrack = screenStream.getTracks()[0];
-          screenTrackRef.current = screenTrack;
-          
-          // Note: simple-peer replaceTrack support varies. 
-          // We'll just show a toast for now as full implementation is complex
-          toast('Screen sharing started (experimental)');
-          
-          screenTrack.onended = () => {
-            setIsScreenSharing(false);
-          };
-          
-          setIsScreenSharing(true);
-        })
-        .catch((err) => {
-          console.error("Error sharing screen:", err);
+      // Stop screen share and switch back to camera
+      try {
+        screenTrackRef.current.stop();
+        
+        // Get camera stream again
+        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        
+        // Replace track in local stream
+        const oldTrack = stream.getVideoTracks()[0];
+        stream.removeTrack(oldTrack);
+        stream.addTrack(videoTrack);
+        
+        // Update local video
+        if (userVideo.current) {
+          userVideo.current.srcObject = stream;
+        }
+        
+        // Replace track in all peer connections
+        peersRef.current.forEach(({ peer }) => {
+          const sender = peer._pc?.getSenders()?.find(s => s.track?.kind === 'video');
+          if (sender) {
+            sender.replaceTrack(videoTrack);
+          }
         });
+        
+        // Notify others
+        socketRef.current.emit('stop-screen-share', { classId });
+        toast.success('Screen sharing stopped');
+        setIsScreenSharing(false);
+      } catch (err) {
+        console.error('Error stopping screen share:', err);
+        toast.error('Failed to stop screen sharing');
+      }
+    } else {
+      // Start screen share
+      try {
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+          video: { cursor: 'always' },
+          audio: false
+        });
+        
+        const screenTrack = screenStream.getVideoTracks()[0];
+        screenTrackRef.current = screenTrack;
+        
+        // Replace track in local stream
+        const oldTrack = stream.getVideoTracks()[0];
+        stream.removeTrack(oldTrack);
+        stream.addTrack(screenTrack);
+        
+        // Update local video
+        if (userVideo.current) {
+          userVideo.current.srcObject = stream;
+        }
+        
+        // Replace track in all peer connections
+        peersRef.current.forEach(({ peer }) => {
+          const sender = peer._pc?.getSenders()?.find(s => s.track?.kind === 'video');
+          if (sender) {
+            sender.replaceTrack(screenTrack);
+          }
+        });
+        
+        // Handle when user stops sharing via browser UI
+        screenTrack.onended = () => {
+          toggleScreenShare(); // This will switch back to camera
+        };
+        
+        // Notify others
+        socketRef.current.emit('start-screen-share', { 
+          classId,
+          userId: user._id,
+          userName: user.fullName
+        });
+        
+        toast.success('Screen sharing started');
+        setIsScreenSharing(true);
+      } catch (err) {
+        console.error('Error sharing screen:', err);
+        if (err.name === 'NotAllowedError') {
+          toast.error('Screen sharing permission denied');
+        } else {
+          toast.error('Failed to start screen sharing');
+        }
+      }
     }
   };
 
@@ -347,6 +595,16 @@ const VirtualClass = () => {
     }
   };
 
+  const muteStudent = (studentSocketId) => {
+    socketRef.current.emit('teacher-mute-student', { targetSocketId: studentSocketId, classId });
+    toast.success('Student muted');
+  };
+
+  const turnOffStudentVideo = (studentSocketId) => {
+    socketRef.current.emit('teacher-video-off-student', { targetSocketId: studentSocketId, classId });
+    toast.success('Student camera turned off');
+  };
+
   return (
     <div className="flex h-screen bg-gray-900 overflow-hidden cyber-bg">
       {/* Main Video Area */}
@@ -376,15 +634,78 @@ const VirtualClass = () => {
 
         {/* Video Grid */}
         <div className="flex-1 p-4 overflow-y-auto custom-scrollbar pt-20 pb-24">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full content-start">
-            {/* Local Video */}
-            <VideoCard isLocal={true} stream={stream} userName="You" />
-            
-            {/* Remote Videos */}
-            {peers.map((peer, index) => (
-              <VideoCard key={index} peer={peer.peer} userName={peer.userName} />
-            ))}
-          </div>
+          {user.role === 'student' ? (
+            // Student view: Teacher video large, others small
+            <div className="flex flex-col gap-4 h-full">
+              {/* Teacher's large video */}
+              {peers.find(p => p.userType === 'teacher') ? (
+                <div className="flex-1 relative">
+                  <div className="relative bg-gray-900 rounded-lg overflow-hidden border-2 border-cyan-500/50 shadow-[0_0_30px_rgba(6,182,212,0.3)] h-full w-full">
+                    <video
+                      playsInline
+                      autoPlay
+                      ref={(ref) => {
+                        if (ref) {
+                          const teacherPeer = peers.find(p => p.userType === 'teacher');
+                          if (teacherPeer?.peer) {
+                            teacherPeer.peer.on('stream', (remoteStream) => {
+                              ref.srcObject = remoteStream;
+                            });
+                          }
+                        }
+                      }}
+                      className="w-full h-full object-contain bg-black"
+                    />
+                    <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-sm px-4 py-2 rounded-full border border-cyan-500/50 z-10">
+                      <span className="text-white text-lg font-bold flex items-center gap-2">
+                        👨‍🏫 {peers.find(p => p.userType === 'teacher')?.userName || 'Teacher'}
+                        <span className="w-3 h-3 bg-red-500 rounded-full animate-pulse"/>
+                      </span>
+                    </div>
+                    {captionsEnabled && currentCaption && (
+                      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 max-w-[90%] bg-black/90 backdrop-blur-md px-6 py-3 rounded-lg border border-green-500/50 shadow-lg z-10">
+                        <p className="text-white text-center font-medium">{currentCaption}</p>
+                      </div>
+                    )}
+                  </div>
+                  {captionsEnabled && (
+                    <div className="absolute top-2 right-2 z-20">
+                      <select
+                        value={captionLanguage}
+                        onChange={(e) => setCaptionLanguage(e.target.value)}
+                        className="bg-gray-900/90 text-white text-xs px-3 py-1.5 rounded-lg border border-green-500/50 focus:outline-none focus:border-green-500"
+                      >
+                        <option value="en-IN">🇬🇧 English</option>
+                        <option value="hi-IN">🇮🇳 हिन्दी</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+              
+              {/* Small videos grid */}
+              <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2" style={{height: '180px'}}>
+                {/* Local Video */}
+                <VideoCard isLocal={true} stream={stream} userName="You" />
+                
+                {/* Other students */}
+                {peers.filter(p => p.userType !== 'teacher').map((peer, index) => (
+                  <VideoCard key={index} peer={peer.peer} userName={peer.userName} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            // Teacher view: Equal grid
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full content-start">
+              {/* Local Video */}
+              <VideoCard isLocal={true} stream={stream} userName="You" />
+              
+              {/* Remote Videos */}
+              {peers.map((peer, index) => (
+                <VideoCard key={index} peer={peer.peer} userName={peer.userName} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Controls Bar */}
@@ -412,6 +733,14 @@ const VirtualClass = () => {
           >
             <Monitor size={20} />
           </button>
+
+          <button 
+            onClick={() => setCaptionsEnabled(!captionsEnabled)}
+            className={`p-3 rounded-full transition-all duration-300 ${captionsEnabled ? 'bg-green-500 text-white shadow-[0_0_15px_rgba(34,197,94,0.5)]' : 'bg-gray-800 hover:bg-gray-700 text-white'}`}
+            title="Toggle Captions"
+          >
+            <Subtitles size={20} />
+          </button>
           
           <div className="w-px h-8 bg-gray-700 mx-2" />
           
@@ -430,6 +759,14 @@ const VirtualClass = () => {
             title="Participants"
           >
             <Users size={20} />
+          </button>
+
+          <button 
+            onClick={() => setShowWhiteboard(!showWhiteboard)}
+            className={`p-3 rounded-full transition-all duration-300 ${showWhiteboard ? 'bg-yellow-500 text-white shadow-[0_0_15px_rgba(234,179,8,0.5)]' : 'bg-gray-800 hover:bg-gray-700 text-white'}`}
+            title="Whiteboard"
+          >
+            <Presentation size={20} />
           </button>
 
           <div className="w-px h-8 bg-gray-700 mx-2" />
@@ -529,6 +866,20 @@ const VirtualClass = () => {
                     {user.role === 'teacher' && peer.userType === 'student' && (
                       <div className="flex gap-1">
                         <button 
+                          onClick={() => muteStudent(peer.peerID)}
+                          className="p-1 text-orange-500 hover:bg-orange-500/20 rounded"
+                          title="Mute Student"
+                        >
+                          <VolumeX size={14} />
+                        </button>
+                        <button 
+                          onClick={() => turnOffStudentVideo(peer.peerID)}
+                          className="p-1 text-blue-500 hover:bg-blue-500/20 rounded"
+                          title="Turn Off Camera"
+                        >
+                          <VideoOff size={14} />
+                        </button>
+                        <button 
                           onClick={() => markAttendance(peer.userId, true)}
                           className="p-1 text-green-500 hover:bg-green-500/20 rounded"
                           title="Mark Present"
@@ -549,6 +900,24 @@ const VirtualClass = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Whiteboard Modal */}
+      {showWhiteboard && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="w-full h-full max-w-7xl max-h-[90vh] bg-gray-900 rounded-lg overflow-hidden border-2 border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.3)]">
+            <div className="flex justify-between items-center p-3 bg-gray-800 border-b border-cyan-900/30">
+              <h2 className="text-cyan-400 font-bold tracking-wider">VIRTUAL WHITEBOARD</h2>
+              <button
+                onClick={() => setShowWhiteboard(false)}
+                className="text-gray-400 hover:text-white p-2 rounded hover:bg-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <Whiteboard socket={socketRef.current} classId={classId} isTeacher={user.role === 'teacher'} />
+          </div>
         </div>
       )}
     </div>

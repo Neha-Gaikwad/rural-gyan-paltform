@@ -20,6 +20,10 @@ const virtualClassRoutes = require('./routes/virtualClass');
 
 const app = express();
 const server = http.createServer(app);
+
+// Trust proxy for rate limiting
+app.set('trust proxy', 1);
+
 const io = socketIo(server, {
   cors: {
     origin: [process.env.CLIENT_URL || "http://localhost:3001", "http://localhost:3001", "http://localhost:3000", "http://localhost:5500", "http://127.0.0.1:5500", "null"],
@@ -102,6 +106,28 @@ io.on('connection', (socket) => {
     socket.userType = userType;
     socket.userName = userName;
     socket.classId = classId;
+
+    // Get existing participants in the room
+    const room = io.sockets.adapter.rooms.get(classId);
+    const existingParticipants = [];
+    if (room) {
+      room.forEach(socketId => {
+        if (socketId !== socket.id) {
+          const existingSocket = io.sockets.sockets.get(socketId);
+          if (existingSocket) {
+            existingParticipants.push({
+              socketId,
+              userId: existingSocket.userId,
+              userType: existingSocket.userType,
+              userName: existingSocket.userName
+            });
+          }
+        }
+      });
+    }
+
+    // Send existing participants to the new joiner
+    socket.emit('existing-participants', existingParticipants);
 
     // Notify others about new participant
     socket.to(classId).emit('participant-joined', {
@@ -187,10 +213,32 @@ io.on('connection', (socket) => {
     });
   });
 
+  // Live captions
+  socket.on('caption-update', (data) => {
+    socket.to(data.classId).emit('caption-update', {
+      caption: data.caption,
+      userId: data.userId,
+      userName: data.userName
+    });
+  });
+
   // Mute/unmute controls (teacher only)
   socket.on('mute-participant', (data) => {
     if (socket.userType === 'teacher') {
       io.to(socket.classId).emit('participant-muted', data);
+    }
+  });
+
+  // Teacher controls for students
+  socket.on('teacher-mute-student', (data) => {
+    if (socket.userType === 'teacher') {
+      io.to(data.targetSocketId).emit('force-mute');
+    }
+  });
+
+  socket.on('teacher-video-off-student', (data) => {
+    if (socket.userType === 'teacher') {
+      io.to(data.targetSocketId).emit('force-video-off');
     }
   });
 
@@ -212,6 +260,15 @@ io.on('connection', (socket) => {
       classId: data.classId,
       endedBy: socket.userId
     });
+  });
+
+  // Whiteboard events
+  socket.on('whiteboard-draw', (data) => {
+    socket.to(data.classId).emit('whiteboard-draw', data);
+  });
+
+  socket.on('whiteboard-clear', (data) => {
+    socket.to(data.classId).emit('whiteboard-clear', data);
   });
 });
 
