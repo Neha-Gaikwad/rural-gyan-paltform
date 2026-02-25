@@ -5,7 +5,7 @@ import Peer from 'simple-peer';
 import { 
   Mic, MicOff, Video, VideoOff, Monitor, Phone, 
   MessageSquare, Users, X, Send,
-  Clock, CheckCircle, XCircle, Subtitles, Volume2, VolumeX, Presentation
+  Clock, CheckCircle, XCircle, Subtitles, Volume2, VolumeX, Presentation, Hand
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -68,6 +68,8 @@ const VirtualClass = () => {
   const [currentCaption, setCurrentCaption] = useState('');
   const [captionLanguage, setCaptionLanguage] = useState('en-IN');
   const captionTimeoutRef = useRef(null);
+  const [raisedHands, setRaisedHands] = useState([]);
+  const [isHandRaised, setIsHandRaised] = useState(false);
 
   const translateText = async (text, targetLang) => {
     if (targetLang === 'en-IN') return text;
@@ -271,6 +273,23 @@ const VirtualClass = () => {
             setIsVideoEnabled(false);
             toast.error('Teacher turned off your camera');
           }
+        });
+
+        // Raise hand events
+        socketRef.current.on('hand-raised', (data) => {
+          setRaisedHands(prev => [...prev, data]);
+          if (user.role === 'teacher') {
+            toast(`✋ ${data.userName} raised their hand`, { icon: '✋' });
+          }
+        });
+
+        socketRef.current.on('hand-lowered', (data) => {
+          setRaisedHands(prev => prev.filter(h => h.userId !== data.userId));
+        });
+
+        socketRef.current.on('all-hands-lowered', () => {
+          setRaisedHands([]);
+          setIsHandRaised(false);
         });
       })
       .catch((err) => {
@@ -545,6 +564,7 @@ const VirtualClass = () => {
         timestamp: new Date()
       };
       
+      console.log('Sending message with userId:', user._id, 'Full data:', messageData);
       socketRef.current.emit('chat-message', messageData);
       // Don't add locally - wait for server broadcast
       setNewMessage('');
@@ -603,6 +623,24 @@ const VirtualClass = () => {
   const turnOffStudentVideo = (studentSocketId) => {
     socketRef.current.emit('teacher-video-off-student', { targetSocketId: studentSocketId, classId });
     toast.success('Student camera turned off');
+  };
+
+  const toggleRaiseHand = () => {
+    if (isHandRaised) {
+      socketRef.current.emit('lower-hand', { classId, userId: user._id });
+      setIsHandRaised(false);
+      toast.success('Hand lowered');
+    } else {
+      socketRef.current.emit('raise-hand', { classId, userId: user._id, userName: user.fullName });
+      setIsHandRaised(true);
+      toast.success('Hand raised');
+    }
+  };
+
+  const lowerAllHands = () => {
+    socketRef.current.emit('lower-all-hands', { classId });
+    setRaisedHands([]);
+    toast.success('All hands lowered');
   };
 
   return (
@@ -769,6 +807,29 @@ const VirtualClass = () => {
             <Presentation size={20} />
           </button>
 
+          {user.role === 'student' && (
+            <button 
+              onClick={toggleRaiseHand}
+              className={`p-3 rounded-full transition-all duration-300 ${isHandRaised ? 'bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] animate-bounce' : 'bg-gray-800 hover:bg-gray-700 text-white'}`}
+              title={isHandRaised ? "Lower Hand" : "Raise Hand"}
+            >
+              <Hand size={20} />
+            </button>
+          )}
+
+          {user.role === 'teacher' && raisedHands.length > 0 && (
+            <button 
+              onClick={lowerAllHands}
+              className="p-3 rounded-full bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.5)] transition-all duration-300 relative"
+              title="Lower All Hands"
+            >
+              <Hand size={20} />
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {raisedHands.length}
+              </span>
+            </button>
+          )}
+
           <div className="w-px h-8 bg-gray-700 mx-2" />
           
           <button 
@@ -799,25 +860,29 @@ const VirtualClass = () => {
           {showChat && (
             <>
               <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-                {messages.map((msg, idx) => (
-                  <div key={idx} className={`flex flex-col ${msg.userId === user._id ? 'items-end' : 'items-start'}`}>
+                {messages.map((msg, idx) => {
+                  console.log('Message:', msg.userId, 'Current User:', user._id, 'Match:', msg.userId?.toString() === user._id?.toString());
+                  const isMyMessage = msg.userId?.toString() === user._id?.toString();
+                  return (
+                  <div key={idx} className={`flex flex-col ${isMyMessage ? 'items-end' : 'items-start'}`}>
                     <div className="flex items-baseline gap-2 mb-1">
-                      <span className={`text-[10px] font-bold ${msg.userId === user._id ? 'text-cyan-400' : 'text-purple-400'}`}>
-                        {msg.userId === user._id ? 'YOU' : msg.userName?.toUpperCase()}
+                      <span className={`text-[10px] font-bold ${isMyMessage ? 'text-cyan-400' : 'text-purple-400'}`}>
+                        {isMyMessage ? 'YOU' : msg.userName?.toUpperCase()}
                       </span>
                       <span className="text-[10px] text-gray-500">
                         {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <div className={`px-3 py-2 rounded-lg max-w-[90%] text-sm ${
-                      msg.userId === user._id 
+                      isMyMessage 
                         ? 'bg-cyan-900/30 border border-cyan-500/30 text-cyan-100 rounded-tr-none' 
                         : 'bg-gray-800 border border-gray-700 text-gray-200 rounded-tl-none'
                     }`}>
                       {msg.message}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
               <form onSubmit={sendMessage} className="p-4 border-t border-cyan-900/30 bg-gray-800/30">
@@ -856,11 +921,21 @@ const VirtualClass = () => {
                 
                 {peers.map((peer, idx) => (
                   <div key={idx} className="flex items-center gap-3 p-2 rounded hover:bg-gray-800 border border-transparent hover:border-gray-700 transition-colors">
-                    <div className="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs">
+                    <div className="w-8 h-8 rounded bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold text-xs relative">
                       {peer.userName?.charAt(0) || '?'}
+                      {raisedHands.some(h => h.userId === peer.userId) && (
+                        <span className="absolute -top-1 -right-1 text-orange-500 animate-bounce">
+                          ✋
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-300">{peer.userName || 'Unknown User'}</p>
+                      <p className="text-sm font-medium text-gray-300 flex items-center gap-2">
+                        {peer.userName || 'Unknown User'}
+                        {raisedHands.some(h => h.userId === peer.userId) && (
+                          <span className="text-orange-500 text-xs animate-pulse">✋</span>
+                        )}
+                      </p>
                       <p className="text-[10px] text-gray-500">{peer.userType?.toUpperCase() || 'PARTICIPANT'}</p>
                     </div>
                     {user.role === 'teacher' && peer.userType === 'student' && (

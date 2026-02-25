@@ -160,6 +160,7 @@ io.on('connection', (socket) => {
       userId: data.userId,
       timestamp: new Date()
     };
+    console.log('Broadcasting message:', messageWithTimestamp);
     // Broadcast to everyone in the room INCLUDING sender
     io.to(data.classId).emit('chat-message', messageWithTimestamp);
   });
@@ -269,6 +270,27 @@ io.on('connection', (socket) => {
 
   socket.on('whiteboard-clear', (data) => {
     socket.to(data.classId).emit('whiteboard-clear', data);
+  });
+
+  // Raise hand events
+  socket.on('raise-hand', (data) => {
+    io.to(data.classId).emit('hand-raised', {
+      userId: data.userId,
+      userName: data.userName,
+      socketId: socket.id
+    });
+  });
+
+  socket.on('lower-hand', (data) => {
+    io.to(data.classId).emit('hand-lowered', {
+      userId: data.userId
+    });
+  });
+
+  socket.on('lower-all-hands', (data) => {
+    if (socket.userType === 'teacher') {
+      io.to(data.classId).emit('all-hands-lowered');
+    }
   });
 });
 
