@@ -11,6 +11,7 @@ import ClassManagement from '../components/Teacher/ClassManagement';
 import PerformanceAnalysis from '../components/Teacher/PerformanceAnalysis';
 import MaterialsManagement from '../components/Teacher/MaterialsManagement';
 import Profile from '../components/Common/Profile';
+import Timetable from '../components/Teacher/Timetable';
 
 const TeacherDashboard = () => {
   const { t } = useTranslation();
@@ -25,6 +26,7 @@ const TeacherDashboard = () => {
       '/teacher/students': t('classManagement'),
       '/teacher/performance': t('performanceAnalysis'),
       '/teacher/materials': 'Materials Management',
+      '/teacher/timetable': 'Weekly Timetable',
       '/teacher/profile': t('profile')
     };
     return routes[pathname] || t('dashboard');
@@ -64,6 +66,7 @@ const TeacherDashboard = () => {
               <Route path="students" element={<ClassManagement />} />
               <Route path="performance" element={<PerformanceAnalysis />} />
               <Route path="materials" element={<MaterialsManagement />} />
+              <Route path="timetable" element={<Timetable />} />
               <Route path="profile" element={<Profile />} />
             </Routes>
           </div>

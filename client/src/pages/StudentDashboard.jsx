@@ -10,6 +10,7 @@ import AITutor from '../components/Student/AITutor';
 import CodeEditor from '../components/Student/CodeEditor';
 import QuizTaker from '../components/Student/QuizTaker';
 import Profile from '../components/Common/Profile';
+import StudentTimetable from '../components/Student/StudentTimetable';
 
 const StudentDashboard = () => {
   const { t } = useTranslation();
@@ -22,6 +23,7 @@ const StudentDashboard = () => {
       '/student/materials': t('materials'),
       '/student/ai-tutor': t('aiTutor'),
       '/student/code-editor': t('virtualCodeEditor'),
+      '/student/timetable': 'My Timetable',
       '/student/profile': t('profile')
     };
     return routes[pathname] || t('dashboard');
@@ -63,6 +65,7 @@ const StudentDashboard = () => {
               <Route path="ai-tutor" element={<AITutor />} />
               <Route path="code-editor" element={<CodeEditor />} />
               <Route path="quiz/:quizId" element={<QuizTaker />} />
+              <Route path="timetable" element={<StudentTimetable />} />
               <Route path="profile" element={<Profile />} />
             </Routes>
           </div>
