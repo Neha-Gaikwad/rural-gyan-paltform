@@ -9,6 +9,8 @@
 \usepackage{tabularx}
 \usepackage{booktabs}
 \usepackage{hyperref}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows, positioning}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -67,6 +69,37 @@ The Rural Gyan Platform operates on an optimized three-tier architectural paradi
 
 \subsection{Architectural Topology}
 The \textbf{Client Tier} is an isomorphic Single Page Application (SPA) constructed utilizing React.js, responsible for managing complex frontend state and optimizing browser-side rendering cycles. The \textbf{Application Tier} functions as a RESTful API server authored in Node.js utilizing the Express.js framework, managing routing, business logic, asynchronous non-blocking I/O operations, and integrating third-party service hooks. The \textbf{Data Tier} leverages MongoDB Atlas, a highly available, fully managed NoSQL document database, allowing dynamic schemas crucial for diverse educational metrics. 
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=2.8cm,
+    auto,
+    comp/.style={rectangle, draw, fill=blue!10, text width=7.5em, text centered, rounded corners, minimum height=3.5em, font=\footnotesize},
+    db/.style={cylinder, draw, shape border rotate=90, aspect=0.25, fill=green!10, text width=6em, text centered, minimum height=4em, font=\footnotesize},
+    api/.style={ellipse, draw, fill=red!10, text width=6em, text centered, minimum height=3em, font=\footnotesize},
+    line/.style={draw, -latex', thick}
+]
+
+    % Nodes
+    \node [comp] (client) {\textbf{Client Tier} \\ React.js SPA \\ React Native};
+    \node [comp, right=of client] (server) {\textbf{Application Tier} \\ Express.js API \\ Socket.io Server};
+    \node [db, right=of server] (database) {\textbf{Data Tier} \\ MongoDB Atlas \\ (NoSQL)};
+    
+    \node [api, above=1cm of server] (gemini) {Google Gemini \\ 2.0 API};
+    \node [api, above=1cm of client] (webrtc) {WebRTC P2P \& \\ STUN Servers};
+    
+    % Paths
+    \path [line, <->] (client) -- node[above, font=\scriptsize] {HTTPS /} node[below, font=\scriptsize] {WebSockets} (server);
+    \path [line, <->] (server) -- node[above, font=\scriptsize] {Mongoose/TCP} (database);
+    \path [line, <->] (server) -- node[right, font=\scriptsize] {AI Prompts} (gemini);
+    \path [line, <->] (client) -- node[left, font=\scriptsize] {Signaling} (webrtc);
+
+\end{tikzpicture}
+\caption{System Architecture Diagram detailing the Three-Tier Model with specific technology boundaries and external API hooks.}
+\label{fig:architecture}
+\end{figure}
+
 
 \subsection{Real-time Communication Infrastructure}
 To facilitate instantaneous synchronization across clients, WebSocket protocols are abstracted via \texttt{Socket.io}. The system strictly scopes event traffic by compartmentalizing namespaces. A primary namespace orchestrates all virtual classroom events (peer signaling, chat logic, whiteboard telemetry), while a dedicated \texttt{/tutor} namespace securely handles all asymmetric asynchronous communication pertaining to the AI Tutor queries to prevent event pollution and collision.
