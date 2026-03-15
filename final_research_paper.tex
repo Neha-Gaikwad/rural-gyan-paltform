@@ -70,36 +70,51 @@ The Rural Gyan Platform operates on an optimized three-tier architectural paradi
 \subsection{Architectural Topology}
 The \textbf{Client Tier} is an isomorphic Single Page Application (SPA) constructed utilizing React.js, responsible for managing complex frontend state and optimizing browser-side rendering cycles. The \textbf{Application Tier} functions as a RESTful API server authored in Node.js utilizing the Express.js framework, managing routing, business logic, asynchronous non-blocking I/O operations, and integrating third-party service hooks. The \textbf{Data Tier} leverages MongoDB Atlas, a highly available, fully managed NoSQL document database, allowing dynamic schemas crucial for diverse educational metrics. 
 
-\begin{figure}[htbp]
+\begin{figure*}[htbp]
 \centering
 \begin{tikzpicture}[
-    node distance=2.8cm,
+    node distance=2.5cm,
     auto,
-    comp/.style={rectangle, draw, fill=blue!10, text width=7.5em, text centered, rounded corners, minimum height=3.5em, font=\footnotesize},
-    db/.style={cylinder, draw, shape border rotate=90, aspect=0.25, fill=green!10, text width=6em, text centered, minimum height=4em, font=\footnotesize},
-    api/.style={ellipse, draw, fill=red!10, text width=6em, text centered, minimum height=3em, font=\footnotesize},
-    line/.style={draw, -latex', thick}
+    comp/.style={rectangle, draw=blue!80, fill=blue!5, text width=8.5em, text centered, rounded corners, minimum height=3.5em, font=\scriptsize},
+    db/.style={cylinder, draw=green!80, shape border rotate=90, aspect=0.25, fill=green!5, text width=6.5em, text centered, minimum height=3em, font=\scriptsize},
+    api/.style={ellipse, draw=red!80, fill=red!5, text width=7em, text centered, minimum height=3em, font=\scriptsize},
+    line/.style={draw, -latex', thick, font=\scriptsize}
 ]
 
-    % Nodes
-    \node [comp] (client) {\textbf{Client Tier} \\ React.js SPA \\ React Native};
-    \node [comp, right=of client] (server) {\textbf{Application Tier} \\ Express.js API \\ Socket.io Server};
-    \node [db, right=of server] (database) {\textbf{Data Tier} \\ MongoDB Atlas \\ (NoSQL)};
+    % Client Layer
+    \node [comp] (react) {\textbf{Web Client} \\ React.js SPA \\ (Tailwind CSS)};
+    \node [comp, below=1cm of react] (mobile) {\textbf{Mobile Client} \\ React Native \\ (Expo)};
     
-    \node [api, above=1cm of server] (gemini) {Google Gemini \\ 2.0 API};
-    \node [api, above=1cm of client] (webrtc) {WebRTC P2P \& \\ STUN Servers};
+    % Server Layer
+    \node [comp, right=3.5cm of react] (express) {\textbf{Application API} \\ Express.js Server};
+    \node [comp, below=1cm of express] (socket) {\textbf{Real-Time Bus} \\ Socket.io Server};
     
-    % Paths
-    \path [line, <->] (client) -- node[above, font=\scriptsize] {HTTPS /} node[below, font=\scriptsize] {WebSockets} (server);
-    \path [line, <->] (server) -- node[above, font=\scriptsize] {Mongoose/TCP} (database);
-    \path [line, <->] (server) -- node[right, font=\scriptsize] {AI Prompts} (gemini);
-    \path [line, <->] (client) -- node[left, font=\scriptsize] {Signaling} (webrtc);
-
+    % DB Layer
+    \node [db, right=3cm of express] (mongo) {\textbf{Database Layer} \\ MongoDB Atlas \\ (Users, Classes)};
+    
+    % External APIs
+    \node [api, above=1.5cm of express] (gemini) {Google Gemini \\ 2.0 Multimodal API};
+    \node [api, above=1.5cm of react] (stun) {Google STUN \\ Server (19302)};
+    \node [api, above=1.5cm of mongo] (trans) {Google Translate \\ API Endpoint};
+    
+    % Connections
+    \draw [line, <->] (react.east) -- node[above] {HTTPS REST (JWT)} (express.west);
+    \draw [line, <->] (react.east) -- node[below, sloped] {WebSockets (\texttt{/}, \texttt{/tutor})} (socket.west);
+    \draw [line, <->] (mobile.east) -- node[below, sloped] {HTTPS REST} (express.south west);
+    
+    \draw [line, <->] (express.east) -- node[above] {TCP/Mongoose} (mongo.west);
+    \draw [line, <->] (socket.east) -- node[below, sloped] {TCP/Mongoose} (mongo.south west);
+    
+    \draw [line, <->] (express.north) -- node[right] {Generative Prompts} (gemini.south);
+    \draw [line, <->] (react.north) -- node[left] {ICE Candidate Neg.} (stun.south);
+    \draw [line, <->] (socket.north) -- node[above, sloped] {Axios Requests} (trans.south west);
+    
+    \draw [line, <->, dashed, blue] (react.south) -- node[right] {P2P WebRTC Video/Audio streams} (mobile.north);
+    
 \end{tikzpicture}
-\caption{System Architecture Diagram detailing the Three-Tier Model with specific technology boundaries and external API hooks.}
-\label{fig:architecture}
-\end{figure}
-
+\caption{Comprehensive Full-Stack Architecture depicting relationships across isomorphic client ecosystems, decoupled Express.js/Socket.io service tiers, Atlas NoSQL persistence, and integrated external third-party APIs.}
+\label{fig:comprehensive_arch}
+\end{figure*}
 
 \subsection{Real-time Communication Infrastructure}
 To facilitate instantaneous synchronization across clients, WebSocket protocols are abstracted via \texttt{Socket.io}. The system strictly scopes event traffic by compartmentalizing namespaces. A primary namespace orchestrates all virtual classroom events (peer signaling, chat logic, whiteboard telemetry), while a dedicated \texttt{/tutor} namespace securely handles all asymmetric asynchronous communication pertaining to the AI Tutor queries to prevent event pollution and collision.
@@ -152,6 +167,31 @@ io.on('connection', socket => {
 });
 \end{lstlisting}
 
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    auto,
+    entity/.style={rectangle, draw=black, fill=gray!5, text width=6.5em, text centered, rounded corners, minimum height=2.5em, font=\scriptsize},
+    sym/.style={-latex', thick, font=\scriptsize}
+]
+
+    \node [entity] (teacher) {Instructor Peer};
+    \node [entity, right=4cm of teacher] (student) {Student Peer};
+    \path (teacher) -- (student) node[midway, below=2.5cm, entity, fill=blue!5] (signaling) {Socket.io Server};
+    
+    \draw [sym] (teacher.south) -- node[left, pos=0.4] {1. \texttt{join-virtual-class}} (signaling.north west);
+    \draw [sym] (signaling.north east) -- node[right, pos=0.4] {2. \texttt{participant-joined}} (student.south);
+    
+    \draw [sym] (student.south west) -- node[above right, align=center, pos=0.6] {3. \texttt{video-offer}\\(SDP)} (signaling.north);
+    \draw [sym] (signaling.north) -- node[above left, align=center, pos=0.4] {4. \texttt{video-offer}} (teacher.south east);
+    
+    \draw [sym, dashed, red] (teacher.east) -- node[above] {5. Direct WebRTC P2P Audio/Video Stream} (student.west);
+
+\end{tikzpicture}
+\caption{WebRTC Session Negotiation and Peer-to-Peer Signaling Logic over localized Socket.io namespaces illustrating optimal connection routing.}
+\label{fig:webrtc_flow}
+\end{figure}
+
 \subsection{Screen Sharing and Live Captions}
 The Screen Sharing mechanism executes track substitution locally dynamically executing \texttt{RTCRtpSender.replaceTrack()} logic securely over all active peer connections without necessitating session renogitation.
 
@@ -191,8 +231,40 @@ async function processPrompt(multimodalData) {
 \subsection{Multimodal Input Capabilities}
 Beyond raw textual arrays, students are empowered to interact multidimensionally. PDF document parsing executes natively via the \texttt{pdf-parse} library, extracting valid string data. Word documents (.docx) utilize binary XML parsing heuristics constructed via \texttt{mammoth}, whereas image-based text queries pass through \texttt{Tesseract.js} optical character recognition (OCR) arrays mapping visual arrays to analyzable prompt contexts seamlessly.
 
-\subsection{Translation Translation Pipeline}
+\subsection{Translation Pipeline and Logic Flow}
 Asymmetric translation occurs recursively across the dialogue cycle. Primary inputs, specifically constructed in native Hindi, utilize a pre-processing step hitting the Google Translate infrastructure normalizing raw parameters explicitly into systemic English structures. The English parameter string queries the Gemini framework producing the instructional response. The response dynamically reverses the pipeline ensuring authentic bi-lingual structural support immediately.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+    node distance=1.2cm and 1.5cm,
+    auto,
+    step/.style={rectangle, draw=purple!80, fill=purple!5, text width=7.5em, text centered, rounded corners, minimum height=2.5em, font=\scriptsize},
+    db/.style={cylinder, draw=black, shape border rotate=90, aspect=0.25, fill=gray!10, text width=4em, text centered, minimum height=2em, font=\scriptsize},
+    line/.style={draw, -latex', thick, font=\scriptsize}
+]
+
+    \node [step] (input) {Client: Multimodal Query (Hindi/English)};
+    \node [step, below=2cm of input] (server) {Node.js \texttt{/tutor} \\ Socket Namespace};
+    \node [step, right=2cm of server] (translate) {Google Translate API \\ (Normalization)};
+    \node [step, below=1cm of translate] (gemini) {Google Gemini 2.0 \\ Flash LLM};
+    \node [db, left=1.5cm of server] (mongo) {DB (History)};
+    
+    \draw [line, transform canvas={xshift=-1em}] (input.south) -- node[left] {WebSocket Request} (server.north);
+    \draw [line, transform canvas={xshift=1em}] (server.north) -- node[right] {6. Final Result Format} (input.south);
+    
+    \draw [line, bend left=15] (server) to node[above] {1. If Hindi} (translate);
+    \draw [line, bend left=15] (translate) to node[below] {2. English String} (server);
+    
+    \draw [line] (server) |- node[above right] {3. English Prompt Context} (gemini);
+    \draw [line, dashed] (gemini) -| node[below left] {4. Generated AI Payload} (server);
+    
+    \draw [line] (server) -- node[above] {5. Async Save} (mongo);
+
+\end{tikzpicture}
+\caption{Multimodal AI Tutor Data Pipeline featuring asymmetrical translation processing hooks to normalize non-English queries prior to LLM evaluation, maintaining localized high-performance responses.}
+\label{fig:ai_pipeline}
+\end{figure}
 
 \subsection{Frontend Interactions}
 Clients interact employing file limits optimized to 10MB capacities. Direct Voice Input leverages the native \texttt{MediaRecorder API} producing localized binary blobs sent strictly as transcription buffers. Responses execute within comprehensive paginated local history tracking architectures (50 queries bound by page) indexed cleanly on the MongoDB \texttt{AiChatHistory} dimensional model. UX optimizations include thumbs-up/down qualitative reactions, instantaneous copy-to-clipboard functionalities, fluid fullscreen expanding wrappers, and visual typing manifestation indicators masking query latency optimally.
