@@ -294,7 +294,7 @@ const LandingPage = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
             {[
               {
-                name: "Alex Morgan",
+                name: "Saylee Shelar",
                 role: "Lead Full-Stack Developer",
                 image: "https://i.pravatar.cc/150?u=dev1",
                 color: "from-blue-500/20 to-indigo-500/20",
@@ -302,7 +302,7 @@ const LandingPage = () => {
                 ring: "group-hover:from-blue-500 group-hover:to-indigo-500"
               },
               {
-                name: "Sarah Chen",
+                name: "Neha Gaikwad",
                 role: "AI & ML Engineer",
                 image: "https://i.pravatar.cc/150?u=dev2",
                 color: "from-purple-500/20 to-pink-500/20",
@@ -310,7 +310,7 @@ const LandingPage = () => {
                 ring: "group-hover:from-purple-500 group-hover:to-pink-500"
               },
               {
-                name: "Marcus Johnson",
+                name: "Meghana Prathipati",
                 role: "UI/UX & Frontend Developer",
                 image: "https://i.pravatar.cc/150?u=dev3",
                 color: "from-emerald-500/20 to-teal-500/20",
